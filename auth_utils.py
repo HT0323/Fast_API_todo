@@ -16,12 +16,10 @@ class AuthJwtCsrf():
         return self.pwd_ctx.hash(password)
 
     # ユーザーが入力したパスワードとハッシュ化したパスワードが一致するかをチェック
-
     def verify_pw(self, plain_pw, hashed_pw) -> bool:
         return self.pwd_ctx.verify(plain_pw, hashed_pw)
 
     # JWTトークンの生成
-
     def encode_jwt(self, email) -> str:
         payload = {
             'exp': datetime.utcnow() + timedelta(days=0, minutes=5),
@@ -35,7 +33,6 @@ class AuthJwtCsrf():
         )
 
     # JWTトークンの復号
-
     def decode_jwt(self, token) -> str:
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=['HS256'])
@@ -44,3 +41,26 @@ class AuthJwtCsrf():
             raise HTTPException(status_code=401, detail='The JWT has expired')
         except jwt.InvalidTokenError as e:
             raise HTTPException(status_code=401, detail='JWT is not valid')
+
+    # JWTトークンの検証
+    def verify_jwt(self, request) -> str:
+        token = request.cookies.get("access_token")
+        if not token:
+            raise HTTPException(
+                status_code=401, detail='No JWT exist: may not set yet or deleted')
+        _, _, value = token.partition(" ")
+        subject = self.decode_jwt(value)
+        return subject
+
+    # JWTトークンの検証, JWTトークンの再設定
+    def verify_update_jwt(self, request) -> tuple[str, str]:
+        subject = self.verify_jwt(request)
+        new_token = self.encode_jwt(subject)
+        return new_token, subject
+
+    def verify_csrf_update_jwt(self, request, csrf_protect, headers) -> str:
+        csrf_token = csrf_protect.get_csrf_from_headers(headers)
+        csrf_protect.validate_csrf(csrf_token)
+        subject = self.verify_jwt(request)
+        new_token = self.encode_jwt(subject)
+        return new_token
